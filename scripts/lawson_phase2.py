@@ -11,19 +11,13 @@ from ur5e_control.msg import Plan
 from geometry_msgs.msg import Twist
 from robot_vision_lectures.msg import SphereParams
 
-
+Tool_pose = Twist()
 Ball_Point = tf2_geometry_msgs.PointStamped()
 Ball_Point.header.frame_id = 'camera_color_optical_frame'
 
-# Value for initial height of tool
-linear_z = 0.0
-# Values for initial angular values of tool
-angular_x = 0.0
-angular_y = 0.0
-angular_z = 0.0
-
 valid_sphere_params = False
 valid_tool_pose = False
+first_reading = True
 
 def receive_sphere_params(data):
 	global Ball_Point
@@ -36,19 +30,69 @@ def receive_sphere_params(data):
 	valid_sphere_params = True
 	
 def receive_tool_pose(data):
-	global angular_x
-	global angular_y
-	global angular_z
-	global linear_z
+	global valid_tool_pose
+	global Tool_pose
+	global first_reading
 	
-	linear_z = data.linear.z	
-	angular_x = data.angular.x
-	angular_y = data.angular.y
-	angular_z = data.angular.z
+	if first_reading:
+
+		Tool_pose.linear.z = data.linear.z	
+		Tool_pose.angular.x = data.angular.x
+		Tool_pose.angular.y = data.angular.y
+		Tool_pose.angular.z = data.angular.z
 	
 	valid_tool_pose = True
+	first_reading = False
 	
 
+def generate_plan(ball_pos, tool_pos):
+	plan = Plan()
+	
+	start_pos = Twist()
+	start_pos.linear.x = ball_pos.point.x
+	start_pos.linear.y = ball_pos.point.y
+	start_pos.linear.z = tool_pos.linear.z
+	start_pos.angular.x = tool_pos.angular.x
+	start_pos.angular.y = tool_pos.angular.y
+	start_pos.angular.z = tool_pos.angular.z
+	
+	plan.points.append(start_pos)
+	
+	pickup_pos = Twist()
+	pickup_pos.linear.x = ball_pos.point.x
+	pickup_pos.linear.y = ball_pos.point.y
+	# Compensate for length of gripper
+	pickup_pos.linear.z = 0.16
+	pickup_pos.angular.x = tool_pos.angular.x
+	pickup_pos.angular.y = tool_pos.angular.y
+	pickup_pos.angular.z = tool_pos.angular.z
+	
+	plan.points.append(pickup_pos)
+	
+	waypoint = Twist()
+	waypoint.linear.x = (ball_pos.point.x + 0.12)
+	waypoint.linear.y = ball_pos.point.y
+	waypoint.linear.z = tool_pos.linear.z
+	waypoint.angular.x = tool_pos.angular.x
+	waypoint.angular.y = tool_pos.angular.y
+	waypoint.angular.z = tool_pos.angular.z
+	
+	plan.points.append(waypoint)
+	
+	drop_pos = Twist()
+	drop_pos.linear.x = waypoint.linear.x
+	drop_pos.linear.y = waypoint.linear.y
+	# Compensate for length of gripper
+	drop_pos.linear.z = 0.16
+	drop_pos.angular.x = tool_pos.angular.x
+	drop_pos.angular.y = tool_pos.angular.y
+	drop_pos.angular.z = tool_pos.angular.z
+	
+	plan.points.append(drop_pos)
+	
+	return plan
+	
+	
 if __name__ == '__main__':
 	# Initialize node
 	rospy.init_node('lawson_phase2', anonymous = True)
@@ -65,23 +109,30 @@ if __name__ == '__main__':
 	# 10hz loop rate
 	loop_rate = rospy.Rate(10)
 	
-	plan = Plan()
+	
 	
 	while not rospy.is_shutdown():
 	
 	
 		#print('nothing is valid')
+		print(first_reading)
 
-		if valid_sphere_params: #and valid_tool_pose:
+		if valid_sphere_params and valid_tool_pose:
 		
-			#Ball_Point.header.stamp = rospy.get_rostime()
+			Ball_Point.header.stamp = rospy.get_rostime()
 		
 			Ball_Point_Base = tfBuffer.transform(Ball_Point, 'base', rospy.Duration(1.0))
 			
-		
-			print('Ball in camera frame: x= ', format(Ball_Point.point.x, '.3f'), ' y= ', format(Ball_Point.point.y, '.3f'), ' z= ', format(Ball_Point.point.z, '.3f'))
+			plan = generate_plan(Ball_Point_Base, Tool_pose)
 			
-			print('Ball in base frame: x= ', format(Ball_Point_Base.point.x, '.3f'), ' y= ', format(Ball_Point_Base.point.y, '.3f'), ' z= ', format(Ball_Point_Base.point.z, '.3f'))
+			plan_pub.publish(plan)
+			
+			loop_rate.sleep()
+			
+		
+			#print('Ball in camera frame: x= ', format(Ball_Point.point.x, '.3f'), ' y= ', format(Ball_Point.point.y, '.3f'), ' z= ', format(Ball_Point.point.z, '.3f'))
+			
+			#print('Ball in base frame: x= ', format(Ball_Point_Base.point.x, '.3f'), ' y= ', format(Ball_Point_Base.point.y, '.3f'), ' z= ', format(Ball_Point_Base.point.z, '.3f'))
 			
 		
 	
