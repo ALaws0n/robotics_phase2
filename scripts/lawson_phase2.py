@@ -35,7 +35,8 @@ def receive_tool_pose(data):
 	global first_reading
 	
 	if first_reading:
-
+		Tool_pose.linear.x = data.linear.x
+		Tool_pose.linear.y = data.linear.y
 		Tool_pose.linear.z = data.linear.z	
 		Tool_pose.angular.x = data.angular.x
 		Tool_pose.angular.y = data.angular.y
@@ -44,51 +45,40 @@ def receive_tool_pose(data):
 	valid_tool_pose = True
 	first_reading = False
 	
+def create_waypoint(x, y, z, roll, pitch, yaw):
 
+	waypoint = Twist()
+	
+	waypoint.linear.x = x
+	waypoint.linear.y = y
+	waypoint.linear.z = z
+	
+	waypoint.angular.x = roll
+	waypoint.angular.y = pitch
+	waypoint.angular.z = yaw
+	
+	return waypoint
+	
 def generate_plan(ball_pos, tool_pos):
 	plan = Plan()
 	
-	start_pos = Twist()
-	start_pos.linear.x = ball_pos.point.x
-	start_pos.linear.y = ball_pos.point.y
-	start_pos.linear.z = tool_pos.linear.z
-	start_pos.angular.x = tool_pos.angular.x
-	start_pos.angular.y = tool_pos.angular.y
-	start_pos.angular.z = tool_pos.angular.z
-	
-	plan.points.append(start_pos)
-	
-	pickup_pos = Twist()
-	pickup_pos.linear.x = ball_pos.point.x
-	pickup_pos.linear.y = ball_pos.point.y
-	# Compensate for length of gripper
-	pickup_pos.linear.z = 0.16
-	pickup_pos.angular.x = tool_pos.angular.x
-	pickup_pos.angular.y = tool_pos.angular.y
-	pickup_pos.angular.z = tool_pos.angular.z
-	
+	# Where we start
+	plan.points.append(tool_pos)
+	# Above the ball
+	above_ball = create_waypoint(ball_pos.point.x, ball_pos.point.y, tool_pos.linear.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z)
+	plan.points.append(above_ball)
+	# Pickup position
+	pickup_pos = create_waypoint(ball_pos.point.x, ball_pos.point.y, ball_pos.point.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z)
 	plan.points.append(pickup_pos)
-	
-	waypoint = Twist()
-	waypoint.linear.x = (ball_pos.point.x + 0.12)
-	waypoint.linear.y = ball_pos.point.y
-	waypoint.linear.z = tool_pos.linear.z
-	waypoint.angular.x = tool_pos.angular.x
-	waypoint.angular.y = tool_pos.angular.y
-	waypoint.angular.z = tool_pos.angular.z
-	
-	plan.points.append(waypoint)
-	
-	drop_pos = Twist()
-	drop_pos.linear.x = waypoint.linear.x
-	drop_pos.linear.y = waypoint.linear.y
-	# Compensate for length of gripper
-	drop_pos.linear.z = 0.16
-	drop_pos.angular.x = tool_pos.angular.x
-	drop_pos.angular.y = tool_pos.angular.y
-	drop_pos.angular.z = tool_pos.angular.z
-	
+	# Above the drop point
+	above_drop = create_waypoint(ball_pos.point.x + 0.25, ball_pos.point.y, tool_pos.linear.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z)
+	plan.points.append(above_drop)
+	# Drop position
+	drop_pos = create_waypoint(above_drop.linear.x, above_drop.linear.y, ball_pos.point.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z) 
 	plan.points.append(drop_pos)
+	# Go back to above ball
+	plan.points.append(above_ball)
+	
 	
 	return plan
 	
@@ -113,10 +103,6 @@ if __name__ == '__main__':
 	
 	while not rospy.is_shutdown():
 	
-	
-		#print('nothing is valid')
-		print(first_reading)
-
 		if valid_sphere_params and valid_tool_pose:
 		
 			Ball_Point.header.stamp = rospy.get_rostime()
