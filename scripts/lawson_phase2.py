@@ -1,33 +1,38 @@
 #!/usr/bin/env python3
 
+# Import necessary components
 import rospy
 import tf2_ros
-from tf.transformations import *
 import tf2_geometry_msgs
-
-# import plan messages
+from tf.transformations import *
 from ur5e_control.msg import Plan
 from geometry_msgs.msg import Twist
 from robot_vision_lectures.msg import SphereParams
 from std_msgs.msg import Bool
 
+# Create message for Tool tip position and position of Ball in camera
 Tool_pose = Twist()
-Ball_Point = tf2_geometry_msgs.PointStamped()
-Ball_Point.header.frame_id = 'camera_color_optical_frame'
+Ball_Pos_Cam = tf2_geometry_msgs.PointStamped()
+Ball_Pos_Cam.header.frame_id = 'camera_color_optical_frame'
 
+# Initial Boolean values for control logic
 valid_sphere_params = False
 valid_tool_pose = False
+# For first reading of tooltip position
 first_reading = True
+# Safety measure booleans
 generate_new_plan = True
+hold_movement = True
 
 def receive_sphere_params(data):
-	global Ball_Point
+	global Ball_Pos_Cam
 	global valid_sphere_params
 	
-	Ball_Point.point.x = data.xc
-	Ball_Point.point.y = data.yc
-	Ball_Point.point.z = data.zc
-	
+	# Store x,y,z coordinates of the ball w.r.t the camera
+	Ball_Pos_Cam.point.x = data.xc
+	Ball_Pos_Cam.point.y = data.yc
+	Ball_Pos_Cam.point.z = data.zc
+	# Flip to true since we have received data
 	valid_sphere_params = True
 	
 def receive_tool_pose(data):
@@ -35,6 +40,7 @@ def receive_tool_pose(data):
 	global Tool_pose
 	global first_reading
 	
+	# Grab tooltip position values from initialization point
 	if first_reading:
 		Tool_pose.linear.x = data.linear.x
 		Tool_pose.linear.y = data.linear.y
@@ -43,18 +49,25 @@ def receive_tool_pose(data):
 		Tool_pose.angular.y = data.angular.y
 		Tool_pose.angular.z = data.angular.z
 	
+	# Flip to true since we have received data
 	valid_tool_pose = True
+	# Flip to false as we no longer want to read where the tooltip is
 	first_reading = False
 	
 def receive_generate_signal(data):
 	global generate_new_plan
-	
+	# Change generate_new_plan value to whatever is received from the /generate_plan topic
 	generate_new_plan = data.data
 	
-def create_waypoint(x, y, z, roll, pitch, yaw):
-
-	waypoint = Twist()
+def receive_move_signal(data):
+	global hold_movement
+	# Change hold_movement value to whatever is received from the /movement topic
+	hold_movement = data.data
 	
+def create_waypoint(x, y, z, roll, pitch, yaw):
+	# Create new twist message, set values, then return the message
+	waypoint = Twist()
+
 	waypoint.linear.x = x
 	waypoint.linear.y = y
 	waypoint.linear.z = z
@@ -79,7 +92,7 @@ def generate_plan(ball_pos, tool_pos):
 	# Back to above ball
 	plan.points.append(above_ball)
 	# Above the drop point
-	above_drop = create_waypoint(ball_pos.point.x, ball_pos.point.y - 0.30, tool_pos.linear.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z)
+	above_drop = create_waypoint(ball_pos.point.x, ball_pos.point.y - 0.25, tool_pos.linear.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z)
 	plan.points.append(above_drop)
 	# Drop position
 	drop_pos = create_waypoint(above_drop.linear.x, above_drop.linear.y, ball_pos.point.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z) 
@@ -87,7 +100,7 @@ def generate_plan(ball_pos, tool_pos):
 	# Go back to above drop
 	plan.points.append(above_drop)
 	
-	
+	# Return plan for publishing
 	return plan
 	
 	
@@ -103,6 +116,8 @@ if __name__ == '__main__':
 	tool_pos_sub = rospy.Subscriber('/ur5e/toolpose', Twist, receive_tool_pose)
 	# Subscribe to plan generation node
 	plan_gen_sub = rospy.Subscriber('/generate_plan', Bool, receive_generate_signal)
+	# Subscribe to movement node
+	move_sub = rospy.Subscriber('/movement', Bool, receive_move_signal)
 	# Publisher for plan
 	plan_pub = rospy.Publisher('/plan', Plan, queue_size = 10)
 	
@@ -112,22 +127,30 @@ if __name__ == '__main__':
 	
 	
 	while not rospy.is_shutdown():
-	
+		
+		# Do nothing until we have received valid data
 		if valid_sphere_params and valid_tool_pose:
-		
-			Ball_Point.header.stamp = rospy.get_rostime()
-		
-			Ball_Point_Base = tfBuffer.transform(Ball_Point, 'base', rospy.Duration(1.0))
 			
+			# Set header stamp for Ball_Pos_Cam
+			Ball_Pos_Cam.header.stamp = rospy.get_rostime()
+			# Transform ball coordinates in the camera frame to ball coordinates w.r.t the base of the ur5e
+			Ball_Pos_Base = tfBuffer.transform(Ball_Pos_Cam, 'base', rospy.Duration(1.0))
+			
+			# Generate a path plan
 			if generate_new_plan:
-				print("generating a plan")
-			
-				plan = generate_plan(Ball_Point_Base, Tool_pose)
-				
+				print("Generating a plan...")
+				plan = generate_plan(Ball_Pos_Base, Tool_pose)
+				# Do not generate a plan again, unless the plan_gen_sub receives a value of True
 				generate_new_plan = False
 			
-			plan_pub.publish(plan)
-			
+			# Hold movement until the move_sub receives the signal to begin movement
+			if hold_movement:
+				print("Holding movement...")
+			else:
+				# Publish the plan when ready
+				plan_pub.publish(plan)
+				print("Moving....")
+		
 			loop_rate.sleep()
 			
 		
