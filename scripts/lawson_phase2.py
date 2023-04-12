@@ -9,6 +9,7 @@ import tf2_geometry_msgs
 from ur5e_control.msg import Plan
 from geometry_msgs.msg import Twist
 from robot_vision_lectures.msg import SphereParams
+from std_msgs.msg import Bool
 
 Tool_pose = Twist()
 Ball_Point = tf2_geometry_msgs.PointStamped()
@@ -17,6 +18,7 @@ Ball_Point.header.frame_id = 'camera_color_optical_frame'
 valid_sphere_params = False
 valid_tool_pose = False
 first_reading = True
+generate_new_plan = True
 
 def receive_sphere_params(data):
 	global Ball_Point
@@ -43,6 +45,11 @@ def receive_tool_pose(data):
 	
 	valid_tool_pose = True
 	first_reading = False
+	
+def receive_generate_signal(data):
+	global generate_new_plan
+	
+	generate_new_plan = data.data
 	
 def create_waypoint(x, y, z, roll, pitch, yaw):
 
@@ -94,6 +101,8 @@ if __name__ == '__main__':
 	sphere_params_sub = rospy.Subscriber('/sphere_params', SphereParams, receive_sphere_params)
 	# Subscribe to ur5e toolpose to get angular joint values
 	tool_pos_sub = rospy.Subscriber('/ur5e/toolpose', Twist, receive_tool_pose)
+	# Subscribe to plan generation node
+	plan_gen_sub = rospy.Subscriber('/generate_plan', Bool, receive_generate_signal)
 	# Publisher for plan
 	plan_pub = rospy.Publisher('/plan', Plan, queue_size = 10)
 	
@@ -110,7 +119,12 @@ if __name__ == '__main__':
 		
 			Ball_Point_Base = tfBuffer.transform(Ball_Point, 'base', rospy.Duration(1.0))
 			
-			plan = generate_plan(Ball_Point_Base, Tool_pose)
+			if generate_new_plan:
+				print("generating a plan")
+			
+				plan = generate_plan(Ball_Point_Base, Tool_pose)
+				
+				generate_new_plan = False
 			
 			plan_pub.publish(plan)
 			
