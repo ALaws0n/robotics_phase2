@@ -30,6 +30,7 @@ def ur5e_initialization():
 	# set initial joint positions
 	pos_cmd_point.positions[0] = math.pi/2
 	pos_cmd_point.positions[1] = -math.pi/3
+	pos_cmd_point.positions[2] = math.pi/4
 	pos_cmd_point.positions[3] = -(2*math.pi)/3
 	pos_cmd_point.positions[4] = -math.pi/2
 	# add trajectory point to the command

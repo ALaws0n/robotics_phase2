@@ -3,7 +3,6 @@
 import rospy
 import tf2_ros
 from tf.transformations import *
-from geometry_msgs.msg import Quaternion
 import tf2_geometry_msgs
 
 # import plan messages
@@ -70,14 +69,16 @@ def generate_plan(ball_pos, tool_pos):
 	# Pickup position
 	pickup_pos = create_waypoint(ball_pos.point.x, ball_pos.point.y, ball_pos.point.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z)
 	plan.points.append(pickup_pos)
+	# Back to above ball
+	plan.points.append(above_ball)
 	# Above the drop point
-	above_drop = create_waypoint(ball_pos.point.x + 0.25, ball_pos.point.y, tool_pos.linear.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z)
+	above_drop = create_waypoint(ball_pos.point.x, ball_pos.point.y - 0.30, tool_pos.linear.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z)
 	plan.points.append(above_drop)
 	# Drop position
 	drop_pos = create_waypoint(above_drop.linear.x, above_drop.linear.y, ball_pos.point.z, tool_pos.angular.x, tool_pos.angular.y, tool_pos.angular.z) 
 	plan.points.append(drop_pos)
-	# Go back to above ball
-	plan.points.append(above_ball)
+	# Go back to above drop
+	plan.points.append(above_drop)
 	
 	
 	return plan
@@ -116,9 +117,7 @@ if __name__ == '__main__':
 			loop_rate.sleep()
 			
 		
-			#print('Ball in camera frame: x= ', format(Ball_Point.point.x, '.3f'), ' y= ', format(Ball_Point.point.y, '.3f'), ' z= ', format(Ball_Point.point.z, '.3f'))
 			
-			#print('Ball in base frame: x= ', format(Ball_Point_Base.point.x, '.3f'), ' y= ', format(Ball_Point_Base.point.y, '.3f'), ' z= ', format(Ball_Point_Base.point.z, '.3f'))
 			
 		
 	
